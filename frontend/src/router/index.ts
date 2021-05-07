@@ -4,10 +4,10 @@ import Reservations from '../views/Reservations.vue'
 
 Vue.use(VueRouter)
 
-const routes: Array<RouteConfig> = [
+const routes: readonly RouteConfig[] = [
   {
     path: '/',
-    redirect: 'reservations',
+    redirect: 'reservations'
   },
   {
     path: '/reservations',
@@ -28,7 +28,7 @@ const routes: Array<RouteConfig> = [
 const router = new VueRouter({
   mode: 'history',
   base: process.env.BASE_URL,
-  routes
+  routes: [...routes]
 })
 
 export default router
