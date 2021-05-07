@@ -36,21 +36,26 @@
           {{ n + 1 }} guests
         </option>
       </select>
-      <input
-        class="find-a-table-button"
-        type="button"
-        value="Find a table"
-        v-on:click="makeReservation()"
-      />
+
+      <div class="find-a-table-button">
+        <Spinner v-if="loading" />
+        <input
+          v-if="!loading"
+          type="button"
+          value="Find a table"
+          v-on:click="makeReservation()"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script lang="ts">
 import { Component, Vue } from 'vue-property-decorator'
-
-import { Reservation } from '../../model/Reservation'
 import moment from 'moment'
+
+import Spinner from '../spinner/Spinner.vue'
+import { Reservation } from '../../model/Reservation'
 
 const getInitialDate = (): moment.Moment =>
   // 7 PM today is a good time to eat.
@@ -58,16 +63,22 @@ const getInitialDate = (): moment.Moment =>
     .startOf('day')
     .add(19, 'hours')
 
-const INITIAL_RESERVATION: Reservation = {
+const getInitialReservation = (): Reservation => ({
   name: '',
   email: '',
   partySize: 2,
   moment: getInitialDate()
-}
+})
 
-@Component
+@Component({
+  components: {
+    Spinner
+  }
+})
 export default class ReservationCard extends Vue {
-  private reservation: Reservation = INITIAL_RESERVATION
+  private reservation: Reservation = getInitialReservation()
+
+  private loading = false
 
   getReservationDate(): string {
     return this.reservation.moment.format('YYYY-MM-DD')
@@ -104,11 +115,15 @@ export default class ReservationCard extends Vue {
   }
 
   makeReservation(): void {
-    console.log('Making reservation...')
+    this.loading = true
+
+    setTimeout(() => {
+      this.loading = false
+    }, 2500)
   }
 
   private updateReservation(r: Partial<Reservation>): void {
-    console.log('Updating reservation: ', r)
+    console.log('Updating reservation: ', this.reservation)
     this.reservation = {
       ...this.reservation,
       ...r
@@ -163,7 +178,14 @@ export default class ReservationCard extends Vue {
     grid-area: guest-count-input;
   }
   & > .find-a-table-button {
+    display: flex;
+    justify-content: center;
     grid-area: find-a-table-button;
+
+    & > * {
+      height: 1.5rem;
+      width: 100%;
+    }
   }
 }
 </style>
