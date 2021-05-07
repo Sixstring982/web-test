@@ -52,6 +52,7 @@
 
 <script lang="ts">
 import { Component, Vue } from 'vue-property-decorator'
+import axios from 'axios'
 import moment from 'moment'
 
 import Spinner from '../spinner/Spinner.vue'
@@ -114,12 +115,20 @@ export default class ReservationCard extends Vue {
     this.updateReservation({ partySize: Number(value) })
   }
 
-  makeReservation(): void {
+  async makeReservation() {
     this.loading = true
 
-    setTimeout(() => {
-      this.loading = false
-    }, 2500)
+    axios
+      .get('http://localhost:9090/inventory/list')
+      .then(response => {
+        console.log(response)
+      })
+      .catch(error => {
+        console.log(error)
+      })
+      .then(() => {
+        this.loading = false
+      })
   }
 
   private updateReservation(r: Partial<Reservation>): void {
