@@ -33,6 +33,13 @@
   }
 }
 
+.card-wrapper {
+  padding: 1rem 3rem 3rem;
+  max-width: 20rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px 10px rgba(0, 0, 0, 0.2);
+}
+
 .central-column {
   display: flex;
   flex-direction: column;

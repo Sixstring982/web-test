@@ -115,7 +115,7 @@ export default class ReservationCard extends Vue {
     this.updateReservation({ partySize: Number(value) })
   }
 
-  async makeReservation() {
+  makeReservation(): void {
     this.loading = true
 
     axios
@@ -148,13 +148,6 @@ export default class ReservationCard extends Vue {
   :first-child {
     padding-right: 0.5rem;
   }
-}
-
-.card-wrapper {
-  padding: 1rem 3rem 3rem;
-  max-width: 20rem;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px 10px rgba(0, 0, 0, 0.2);
 }
 
 .input-wrapper {
