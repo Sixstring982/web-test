@@ -2,20 +2,20 @@
   <div>
     <h1>Inventory</h1>
     <div class="inventory-grid">
-      <InventoryView class="inventory-view" />
+      <InventoryViewComponent class="inventory-view" />
       <RestaurantSettings class="restaurant-settings" />
     </div>
   </div>
 </template>
 
 <script lang="ts">
-import InventoryView from '../components/inventory/InventoryView.vue'
+import InventoryViewComponent from '../components/inventory/InventoryView.vue'
 import RestaurantSettings from '../components/restuarant/RestaurantSettings.vue'
 
 export default {
   name: 'Inventory',
   components: {
-    InventoryView,
+    InventoryViewComponent,
     RestaurantSettings
   }
 }
@@ -24,7 +24,7 @@ export default {
 <style scoped lang="scss">
 .inventory-grid {
   display: grid;
-  grid-template-columns: 1fr 10rem;
+  grid-template-columns: 1fr 0fr;
   grid-template-rows: 1fr;
   grid-template-areas: 'inventory-view restaurant-settings';
   row-gap: 2rem;
@@ -35,6 +35,15 @@ export default {
   }
   & > .restaurant-settings {
     grid-area: restaurant-settings;
+  }
+}
+
+@media only screen and (max-width: 600px) {
+  .inventory-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'inventory-view'
+      'restaurant-settings';
   }
 }
 </style>
