@@ -1,6 +1,9 @@
 import { Controller, Get, Post } from '@overnightjs/core'
 import { Request, response, Response } from 'express'
-import { RestaurantSettings } from '../models/RestaurantSettings'
+import {
+  DEFAULT_BASE_PARTIES_PER_TIME_SLOT,
+  RestaurantSettings,
+} from '../models/RestaurantSettings'
 
 @Controller('restaurantsettings')
 export class RestaurantSettingsController {
@@ -16,7 +19,7 @@ export class RestaurantSettingsController {
     // need one of these.
     const initialSettings = new RestaurantSettings({
       id: 1,
-      base_parties_per_time_slot: 3,
+      base_parties_per_time_slot: DEFAULT_BASE_PARTIES_PER_TIME_SLOT,
       address: '123 Easy Street, New York, NY, USA',
     })
 

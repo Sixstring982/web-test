@@ -4,9 +4,11 @@
       <span class="material-icons nav-button" @click="decrementMonth()">
         navigate_before
       </span>
-      <span class="material-icons nav-button today-button"
-            title="Jump to today"
-            @click="jumpToToday()">
+      <span
+        class="material-icons nav-button today-button"
+        title="Jump to today"
+        @click="jumpToToday()"
+      >
         today
       </span>
       <span class="month-label">
@@ -46,6 +48,13 @@
       <input type="button" value="All" @click="selectAll()" />
       <input type="button" value="None" @click="selectNone()" />
     </div>
+    <div class="time-selector-wrapper">
+      <InventoryConfigurationComponent
+        :configs="dateCardConfigs"
+        @copyToSelectedDates="handleCopyToSelectedDates($event)"
+        @applyTimeConfig="handleApplyTimeConfig($event)"
+      />
+    </div>
   </div>
 </template>
 
@@ -53,56 +62,36 @@
 import moment from 'moment'
 import { Component, Vue } from 'vue-property-decorator'
 import DateCardComponent from './DateCard.vue'
+import InventoryConfigurationComponent, {
+  ApplyTimeConfigEvent
+} from './InventoryConfigurationComponent.vue'
 import {
   DateCardConfig,
   dateCardForDayOfMonth,
   emptyDateCardConfig,
   FullDateCardConfig,
-  isEmptyDateCardConfig,
+  isFullDateCardConfig,
+  pastDateCardForDayOfMonth,
   toggleSelected
 } from './DateCardConfig'
-
-const buildDateCardsForRelativeMonth = (
-  delta: number
-): readonly DateCardConfig[] => {
-  const cards = []
-
-  const firstDayOfWeek = moment()
-    .add(delta, 'months')
-    .startOf('month')
-    .day()
-
-  const lastDayOfMonth = moment()
-    .add(delta, 'months')
-    .daysInMonth()
-
-  for (let x = 0; x < 7; x++) {
-    for (let y = 0; y < 6; y++) {
-      const dayOfMonth = x * 6 + y
-      if (
-        dayOfMonth < firstDayOfWeek ||
-        dayOfMonth - firstDayOfWeek >= lastDayOfMonth
-      ) {
-        cards.push(emptyDateCardConfig())
-      } else {
-        cards.push(dateCardForDayOfMonth(dayOfMonth - firstDayOfWeek + 1))
-      }
-    }
-  }
-
-  return cards
-}
+import axios from 'axios'
+import { CopyToSelectedDatesEvent } from './TimeSelector.vue'
 
 @Component({
   components: {
-    DateCardComponent
+    DateCardComponent,
+    InventoryConfigurationComponent
   }
 })
 export default class InventoryViewComponent extends Vue {
-  dateCardConfigs: readonly DateCardConfig[] = buildDateCardsForRelativeMonth(0)
+  dateCardConfigs: readonly DateCardConfig[] = []
 
   monthAndYear = moment().format('MMMM YYYY')
   monthDelta = 0
+
+  async mounted() {
+    this.dateCardConfigs = await this.buildDateCardsForRelativeMonth(0)
+  }
 
   decrementMonth() {
     this.shiftMonth(-1)
@@ -140,23 +129,127 @@ export default class InventoryViewComponent extends Vue {
     }))
   }
 
+  async handleApplyTimeConfig(e: ApplyTimeConfigEvent) {
+    const selectedTimes = {}
+
+    this.dateCardConfigs
+      .filter(isFullDateCardConfig)
+      .filter(x => x.selected)
+      .forEach(x => {
+        selectedTimes[x.dayOfMonth] = [...x.selectedTimes]
+      })
+
+    await axios.post('http://localhost:9090/inventory/update', {
+      forDaysInMonth: moment().add(this.monthDelta, 'months').toISOString(),
+      newCapacity: e.newCapacity,
+      selectedTimes
+    })
+
+    this.dateCardConfigs = await this.buildDateCardsForRelativeMonth(
+      this.monthDelta
+    )
+  }
+
+  handleCopyToSelectedDates(e: CopyToSelectedDatesEvent): void {
+    this.dateCardConfigs = this.dateCardConfigs.map(config => {
+      if (!isFullDateCardConfig(config) || !config.selected) {
+        return config
+      }
+
+      return {
+        ...config,
+        selectedTimes: new Set([...e.fromDateCardConfig.selectedTimes])
+      }
+    })
+  }
+
   private updateFullCardConfigs(
     fn: (c: FullDateCardConfig) => FullDateCardConfig
   ): void {
     this.dateCardConfigs = this.dateCardConfigs.map(x => {
-      if (isEmptyDateCardConfig(x)) {
+      if (!isFullDateCardConfig(x)) {
         return x
       }
       return fn(x)
     })
   }
 
-  private shiftMonth(delta: number): void {
+  private async shiftMonth(delta: number) {
     this.monthDelta += delta
     this.monthAndYear = moment()
       .add(this.monthDelta, 'months')
       .format('MMMM YYYY')
-    this.dateCardConfigs = buildDateCardsForRelativeMonth(this.monthDelta)
+    this.dateCardConfigs = await this.buildDateCardsForRelativeMonth(
+      this.monthDelta
+    )
+  }
+
+  private async buildDateCardsForRelativeMonth(
+    delta: number
+  ): Promise<ReadonlyArray<DateCardConfig>> {
+    const cards = []
+
+    const firstDayOfWeek = moment()
+      .add(delta, 'months')
+      .startOf('month')
+      .day()
+
+    const lastDayOfMonth = moment()
+      .add(delta, 'months')
+      .daysInMonth()
+
+    const today = moment().date()
+
+    const response = (
+      await axios.post('http://localhost:9090/inventory/query', {
+        forMonth: moment()
+          .add(delta, 'months')
+          .toISOString()
+      })
+    ).data
+
+    console.log(response)
+
+    for (let x = 0; x < 7; x++) {
+      for (let y = 0; y < 6; y++) {
+        const calendarIndex = x * 6 + y
+        const dayOfMonth = calendarIndex - firstDayOfWeek + 1
+        if (
+          calendarIndex < firstDayOfWeek ||
+          calendarIndex - firstDayOfWeek >= lastDayOfMonth
+        ) {
+          cards.push(emptyDateCardConfig())
+        } else if (delta < 0 || (delta === 0 && dayOfMonth < today)) {
+          cards.push(pastDateCardForDayOfMonth(dayOfMonth))
+        } else {
+          cards.push(
+            dateCardForDayOfMonth(
+              moment()
+                .add(delta, 'months')
+                .month(),
+              dayOfMonth,
+              this.savedTimesFromCapacity(
+                response.capacityByDayOfMonth[dayOfMonth - 1]
+              )
+            )
+          )
+        }
+      }
+    }
+
+    return cards
+  }
+
+  private savedTimesFromCapacity(
+    capacity: readonly number[]
+  ): ReadonlyMap<number, number> {
+    const map = new Map<number, number>()
+
+    for (let i = 0; i < capacity.length; i++) {
+      map.set(i, capacity[i])
+    }
+
+    return map
   }
 }
 </script>
@@ -171,7 +264,7 @@ export default class InventoryViewComponent extends Vue {
   margin-bottom: 1rem;
 
   & > * {
-    margin: 0 .25rem;
+    margin: 0 0.25rem;
   }
 
   & > .month-label {
@@ -239,3 +332,4 @@ export default class InventoryViewComponent extends Vue {
   }
 }
 </style>
+clip

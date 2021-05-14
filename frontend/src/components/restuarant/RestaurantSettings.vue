@@ -67,8 +67,6 @@ export default class RestaurantSettingsComponent extends Vue {
         this.settings = {
           basePartySize: response.data.base_parties_per_time_slot
         }
-
-        console.log(response)
       })
       .catch(error => {
         this.settings = null

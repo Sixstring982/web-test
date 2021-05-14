@@ -30,3 +30,4 @@ export class RestaurantSettings extends Model<RestaurantSettings> {
   updated_at: string
 }
 
+export const DEFAULT_BASE_PARTIES_PER_TIME_SLOT = 3;
