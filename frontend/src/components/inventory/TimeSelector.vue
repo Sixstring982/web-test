@@ -17,15 +17,15 @@
       @mouseleave="stopDrag()"
     >
       <span
-        v-for="n in 96"
-        v-bind:key="n"
-        v-bind:class="{ selected: isTimeSelected(n), saved: isTimeSaved(n) }"
+        v-for="(n, i) in 96"
+        v-bind:key="i"
+        v-bind:class="{ selected: isTimeSelected(i), saved: isTimeSaved(i) }"
         class="time-selector"
-        @click="toggleTime(n)"
-        @mouseenter="highlightTime(n - 1)"
+        @click="toggleTime(i)"
+        @mouseenter="highlightTime(i - 1)"
         @mouseleave="clearTime()"
       >
-        {{ capacityForTime(n) }}
+        {{ capacityForTime(i) }}
       </span>
     </div>
     <template v-if="currentTime === null">

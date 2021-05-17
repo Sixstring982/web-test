@@ -140,7 +140,9 @@ export default class InventoryViewComponent extends Vue {
       })
 
     await axios.post('http://localhost:9090/inventory/update', {
-      forDaysInMonth: moment().add(this.monthDelta, 'months').toISOString(),
+      forDaysInMonth: moment()
+        .add(this.monthDelta, 'months')
+        .toISOString(),
       newCapacity: e.newCapacity,
       selectedTimes
     })
@@ -222,15 +224,16 @@ export default class InventoryViewComponent extends Vue {
         } else if (delta < 0 || (delta === 0 && dayOfMonth < today)) {
           cards.push(pastDateCardForDayOfMonth(dayOfMonth))
         } else {
+          const capacity = response.capacityByDayOfMonth[dayOfMonth - 1]
+          console.log(capacity.length)
+
           cards.push(
             dateCardForDayOfMonth(
               moment()
                 .add(delta, 'months')
                 .month(),
               dayOfMonth,
-              this.savedTimesFromCapacity(
-                response.capacityByDayOfMonth[dayOfMonth - 1]
-              )
+              this.savedTimesFromCapacity(capacity)
             )
           )
         }
