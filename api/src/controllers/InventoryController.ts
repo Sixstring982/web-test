@@ -1,11 +1,10 @@
-import { Controller, Get, Post } from '@overnightjs/core'
+import { Controller, Post } from '@overnightjs/core'
 import { Request, Response } from 'express'
-import moment, { Moment } from 'moment'
-import { start } from 'repl'
-import { Op } from 'sequelize'
-import { DEFAULT_BASE_PARTIES_PER_TIME_SLOT, Inventory, RestaurantSettings } from '../models'
+import moment from 'moment'
+import { Inventory } from '../models'
 import { buildArray, repeat } from '../util/arrays'
 import { buildMap } from '../util/maps'
+import { queryInventoryAndRestaurantSettings } from './queries'
 
 const FIFTEEN_MINUTE_WINDOWS_PER_DAY = (24 * 60) / 15
 
@@ -18,7 +17,7 @@ export class InventoryController {
     const startDate = moment(date).startOf('month')
     const endDate = moment(date).endOf('month')
 
-    this.queryInventoryAndRestaurantSettings(startDate, endDate, (rows, config) => {
+    queryInventoryAndRestaurantSettings(startDate, endDate, async (rows, config) => {
       const capacityByDayOfMonth = {}
 
       console.log('Query: read', rows.length, 'rows')
@@ -63,7 +62,7 @@ export class InventoryController {
     const endDate = moment(date).endOf('month')
 
     // Merge all existing rows with the new selectedTimes.
-    this.queryInventoryAndRestaurantSettings(startDate, endDate, async (rows, config) => {
+    queryInventoryAndRestaurantSettings(startDate, endDate, async (rows, config) => {
       const rowsByDayOfMonth: ReadonlyMap<number, Inventory> = buildMap(
         rows,
         (row: Inventory) => moment(row.date).date(),
@@ -118,35 +117,6 @@ export class InventoryController {
     }).catch(error => {
       console.log(error)
       res.sendStatus(500)
-    })
-  }
-
-  private queryInventoryAndRestaurantSettings(
-    start: Moment,
-    end: Moment,
-    handler: (rows: readonly Inventory[], config: RestaurantSettings | undefined) => void
-  ) {
-    const rowPromise = Inventory.findAll({
-      where: {
-        date: {
-          [Op.between]: [start.toISOString(), end.toISOString()],
-        },
-      },
-    })
-
-    const configPromise = RestaurantSettings.findOne({
-      where: {
-        id: 1,
-      },
-    })
-
-    return Promise.all([rowPromise, configPromise]).then(resolved => {
-      handler(
-        [...resolved[0]],
-        resolved[1] ?? {
-          base_parties_per_time_slot: DEFAULT_BASE_PARTIES_PER_TIME_SLOT,
-        }
-      )
     })
   }
 }

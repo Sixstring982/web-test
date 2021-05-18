@@ -1,0 +1,1 @@
+export const DEFAULT_BASE_PARTIES_PER_TIME_SLOT = 3;

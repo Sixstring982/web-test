@@ -1,6 +1,7 @@
 import {
   Column,
   CreatedAt,
+  DataType,
   DeletedAt,
   Model,
   PrimaryKey,
@@ -8,8 +9,8 @@ import {
   UpdatedAt,
 } from 'sequelize-typescript'
 
-@Table({ tableName: 'restaurants' })
-export class Restaurant extends Model<Restaurant> {
+@Table({ tableName: 'reservations' })
+export class Reservation extends Model<Reservation> {
   @PrimaryKey
   @Column({ autoIncrement: true })
   id: number
@@ -18,7 +19,13 @@ export class Restaurant extends Model<Restaurant> {
   name: string
 
   @Column
-  address: string
+  email: string
+
+  @Column(DataType.DATE)
+  timestamp: Date
+
+  @Column(DataType.INTEGER)
+  partySize: number
 
   @DeletedAt
   deleted_at: string

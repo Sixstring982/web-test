@@ -22,7 +22,7 @@
         v-bind:class="{ selected: isTimeSelected(i), saved: isTimeSaved(i) }"
         class="time-selector"
         @click="toggleTime(i)"
-        @mouseenter="highlightTime(i - 1)"
+        @mouseenter="highlightTime(i)"
         @mouseleave="clearTime()"
       >
         {{ capacityForTime(i) }}

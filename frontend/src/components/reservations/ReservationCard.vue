@@ -8,8 +8,20 @@
     </h3>
 
     <div class="input-wrapper">
-      <input class="name-input" placeholder="Name" type="text" />
-      <input class="email-input" placeholder="Email" type="text" />
+      <input
+        class="name-input"
+        placeholder="Name"
+        type="text"
+        :value="reservation.name"
+        @change="handleNameChange($event)"
+      />
+      <input
+        class="email-input"
+        placeholder="Email"
+        type="text"
+        :value="reservation.email"
+        @change="handleEmailChange($event)"
+      />
       <input
         class="date-input"
         type="date"
@@ -40,12 +52,20 @@
       <div class="find-a-table-button">
         <Spinner v-if="loading" />
         <input
-          v-if="!loading"
+          v-else
           type="button"
           value="Find a table"
+          :disbaled="!isFormValid()"
           v-on:click="makeReservation()"
         />
       </div>
+
+      <AlertComponent
+        v-if="alertConfig !== null"
+        class="alert"
+        :config="alertConfig"
+        @dismiss="dismissAlert()"
+      />
     </div>
   </div>
 </template>
@@ -53,10 +73,12 @@
 <script lang="ts">
 import { Component, Vue } from 'vue-property-decorator'
 import axios from 'axios'
-import moment from 'moment'
+import moment, { Moment } from 'moment'
 
 import Spinner from '../spinner/Spinner.vue'
 import { Reservation } from '../../model/Reservation'
+import AlertComponent from '../alert/Alert.vue'
+import { AlertConfig, errorAlert, infoAlert } from '../alert/AlertConfig'
 
 const getInitialDate = (): moment.Moment =>
   // 7 PM today is a good time to eat.
@@ -73,13 +95,28 @@ const getInitialReservation = (): Reservation => ({
 
 @Component({
   components: {
+    AlertComponent,
     Spinner
   }
 })
 export default class ReservationCard extends Vue {
   private reservation: Reservation = getInitialReservation()
 
+  alertConfig: AlertConfig | null = null
+
   private loading = false
+
+  handleNameChange(event: InputEvent): void {
+    const name = (event.target as HTMLInputElement).value
+
+    this.updateReservation({ name })
+  }
+
+  handleEmailChange(event: InputEvent): void {
+    const email = (event.target as HTMLInputElement).value
+
+    this.updateReservation({ email })
+  }
 
   getReservationDate(): string {
     return this.reservation.moment.format('YYYY-MM-DD')
@@ -94,9 +131,9 @@ export default class ReservationCard extends Vue {
 
     const newMoment = moment((event.target as HTMLInputElement).value)
 
-    this.updateReservation({
-      moment: newMoment.hour(oldMoment.hour()).minute(oldMoment.minute())
-    })
+    this.updateReservationMoment(
+      newMoment.hour(oldMoment.hour()).minute(oldMoment.minute())
+    )
   }
 
   handleTimeChange(event: InputEvent): void {
@@ -104,9 +141,11 @@ export default class ReservationCard extends Vue {
     const hour = Number(value.split(':')[0])
     const minute = Number(value.split(':')[1])
 
-    this.updateReservation({
-      moment: this.reservation.moment.hour(hour).minute(minute)
-    })
+    this.updateReservationMoment(
+      moment(this.reservation.moment)
+        .hour(hour)
+        .minute(minute)
+    )
   }
 
   handleGuestCountChange(event: InputEvent): void {
@@ -115,20 +154,66 @@ export default class ReservationCard extends Vue {
     this.updateReservation({ partySize: Number(value) })
   }
 
+  isFormValid(): boolean {
+    return this.getFormError() === undefined
+  }
+
   makeReservation(): void {
+    this.dismissAlert()
+
+    const formError = this.getFormError()
+    if (formError !== undefined) {
+      this.alertConfig = errorAlert(formError)
+      return
+    }
+
     this.loading = true
 
     axios
-      .get('http://localhost:9090/inventory/list')
+      .post('http://localhost:9090/reservation/make', {
+        name: this.reservation.name,
+        email: this.reservation.email,
+        partySize: this.reservation.partySize,
+        time: this.reservation.moment.toISOString()
+      })
       .then(response => {
-        console.log(response)
+        if (response.data.error) {
+          this.alertConfig = errorAlert(response.data.error)
+        } else {
+          this.alertConfig = infoAlert('Reservation successful.')
+        }
       })
       .catch(error => {
-        console.log(error)
+        this.alertConfig = errorAlert('Reservation unsuccessful.')
       })
       .then(() => {
         this.loading = false
       })
+  }
+
+  dismissAlert(): void {
+    this.alertConfig = null
+  }
+
+  private getFormError(): string | undefined {
+    if (this.reservation.name.length < 3) {
+      return 'Please enter a longer name.'
+    }
+    // Super simple email regexp. They're really hard to validate properly!
+    if (this.reservation.email.match(/.+@.+\..[a-z]+/) === null) {
+      return 'Please enter a valid email.'
+    }
+    if (this.reservation.partySize < 1) {
+      return 'Please choose a valid party size.'
+    }
+    if (this.reservation.moment.toDate().getTime() < new Date().getTime()) {
+      return 'Please choose a time in the future.'
+    }
+    return undefined
+  }
+
+  private updateReservationMoment(moment: Moment): void {
+    this.updateReservation({ moment })
   }
 
   private updateReservation(r: Partial<Reservation>): void {
@@ -155,11 +240,12 @@ export default class ReservationCard extends Vue {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr 1fr;
   grid-template-areas:
-    'name-input name-input'
-    'email-input email-input'
-    'date-input date-input'
-    'time-input guest-count-input'
-    'find-a-table-button find-a-table-button';
+    'name-input          name-input'
+    'email-input         email-input'
+    'date-input          date-input'
+    'time-input          guest-count-input'
+    'find-a-table-button find-a-table-button'
+    'alert               alert';
 
   row-gap: 0.5rem;
   column-gap: 0.5rem;
@@ -188,6 +274,9 @@ export default class ReservationCard extends Vue {
       height: 1.5rem;
       width: 100%;
     }
+  }
+  & > .alert {
+    grid-area: alert;
   }
 }
 </style>
