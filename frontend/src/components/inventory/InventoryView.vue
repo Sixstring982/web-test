@@ -130,21 +130,31 @@ export default class InventoryViewComponent extends Vue {
   }
 
   async handleApplyTimeConfig(e: ApplyTimeConfigEvent) {
-    const selectedTimes = {}
-
-    this.dateCardConfigs
+    const times: readonly string[][] = this.dateCardConfigs
       .filter(isFullDateCardConfig)
       .filter(x => x.selected)
-      .forEach(x => {
-        selectedTimes[x.dayOfMonth] = [...x.selectedTimes]
+      // esnext doesn't have flatMap? Bummer. I'll flatten below.
+      .map(x => {
+        const startOfDay = moment()
+          .add(this.monthDelta, 'months')
+          .startOf('month')
+          .add(x.dayOfMonth - 1, 'days')
+
+        const selectedTimes = [...x.selectedTimes].map(timeIndex =>
+          moment(startOfDay)
+            .add(15 * timeIndex, 'minutes')
+            .toISOString()
+        )
+
+        return selectedTimes
       })
 
+    const flatTimes = []
+    times.forEach(ts => ts.forEach(t => flatTimes.push(t)))
+
     await axios.post('http://localhost:9090/inventory/update', {
-      forDaysInMonth: moment()
-        .add(this.monthDelta, 'months')
-        .toISOString(),
       newCapacity: e.newCapacity,
-      selectedTimes
+      times: flatTimes
     })
 
     this.dateCardConfigs = await this.buildDateCardsForRelativeMonth(
@@ -204,8 +214,13 @@ export default class InventoryViewComponent extends Vue {
 
     const response = (
       await axios.post('http://localhost:9090/inventory/query', {
-        forMonth: moment()
+        startTime: moment()
           .add(delta, 'months')
+          .startOf('month')
+          .toISOString(),
+        endTime: moment()
+          .add(delta, 'months')
+          .endOf('month')
           .toISOString()
       })
     ).data
@@ -216,6 +231,7 @@ export default class InventoryViewComponent extends Vue {
       for (let y = 0; y < 6; y++) {
         const calendarIndex = x * 6 + y
         const dayOfMonth = calendarIndex - firstDayOfWeek + 1
+
         if (
           calendarIndex < firstDayOfWeek ||
           calendarIndex - firstDayOfWeek >= lastDayOfMonth
@@ -224,8 +240,24 @@ export default class InventoryViewComponent extends Vue {
         } else if (delta < 0 || (delta === 0 && dayOfMonth < today)) {
           cards.push(pastDateCardForDayOfMonth(dayOfMonth))
         } else {
-          const capacity = response.capacityByDayOfMonth[dayOfMonth - 1]
-          console.log(capacity.length)
+          const startOfDay = moment()
+            .add(delta, 'months')
+            .startOf('month')
+            .add(dayOfMonth - 1, 'days')
+
+          const capacitiesByIndex = new Map<number, number>()
+
+          // Loop through all 15-minute windows
+          for (let i = 0; i < 24 * 4; i++) {
+            const windowTime: string = moment(startOfDay)
+              .add(15 * i, 'minutes')
+              .toISOString()
+
+            capacitiesByIndex.set(
+              i,
+              response.overrides[windowTime] ?? response.baseCapacity
+            )
+          }
 
           cards.push(
             dateCardForDayOfMonth(
@@ -233,26 +265,13 @@ export default class InventoryViewComponent extends Vue {
                 .add(delta, 'months')
                 .month(),
               dayOfMonth,
-              this.savedTimesFromCapacity(capacity)
+              capacitiesByIndex
             )
           )
         }
       }
     }
-
     return cards
-  }
-
-  private savedTimesFromCapacity(
-    capacity: readonly number[]
-  ): ReadonlyMap<number, number> {
-    const map = new Map<number, number>()
-
-    for (let i = 0; i < capacity.length; i++) {
-      map.set(i, capacity[i])
-    }
-
-    return map
   }
 }
 </script>
@@ -335,4 +354,3 @@ export default class InventoryViewComponent extends Vue {
   }
 }
 </style>
-clip

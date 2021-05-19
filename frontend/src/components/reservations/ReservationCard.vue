@@ -66,6 +66,16 @@
         :config="alertConfig"
         @dismiss="dismissAlert()"
       />
+
+      <div class="suggested-times-wrapper">
+        <input
+          v-for="time in suggestedTimes"
+          v-bind:key="time.toISOString()"
+          type="button"
+          :value="time.format('HH:mm')"
+          v-on:click="makeReservation(time)"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -103,6 +113,8 @@ export default class ReservationCard extends Vue {
   private reservation: Reservation = getInitialReservation()
 
   alertConfig: AlertConfig | null = null
+
+  suggestedTimes: readonly Moment[] = []
 
   private loading = false
 
@@ -158,14 +170,17 @@ export default class ReservationCard extends Vue {
     return this.getFormError() === undefined
   }
 
-  makeReservation(): void {
+  makeReservation(atTime?: Moment): void {
     this.dismissAlert()
+    this.suggestedTimes = []
 
     const formError = this.getFormError()
     if (formError !== undefined) {
       this.alertConfig = errorAlert(formError)
       return
     }
+
+    const time = atTime ?? this.reservation.moment
 
     this.loading = true
 
@@ -174,13 +189,24 @@ export default class ReservationCard extends Vue {
         name: this.reservation.name,
         email: this.reservation.email,
         partySize: this.reservation.partySize,
-        time: this.reservation.moment.toISOString()
+        time: time.toISOString()
       })
       .then(response => {
-        if (response.data.error) {
-          this.alertConfig = errorAlert(response.data.error)
+        if (response.data.success) {
+          this.alertConfig = infoAlert(
+            ` Reservation made at ${time.format('HH:mm')}.`
+          )
         } else {
-          this.alertConfig = infoAlert('Reservation successful.')
+          if (!response.data.suggestedTimes) {
+            this.alertConfig = errorAlert(
+              'No reservations can be made near this time. Please make a ' +
+                'reservation for another day.'
+            )
+          } else {
+            this.suggestedTimes = response.data.suggestedTimes.map(time =>
+              moment(time)
+            )
+          }
         }
       })
       .catch(error => {
@@ -240,12 +266,13 @@ export default class ReservationCard extends Vue {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr 1fr;
   grid-template-areas:
-    'name-input          name-input'
-    'email-input         email-input'
-    'date-input          date-input'
-    'time-input          guest-count-input'
-    'find-a-table-button find-a-table-button'
-    'alert               alert';
+    'name-input              name-input'
+    'email-input             email-input'
+    'date-input              date-input'
+    'time-input              guest-count-input'
+    'find-a-table-button     find-a-table-button'
+    'alert                   alert'
+    'suggested-times-wrapper suggested-times-wrapper';
 
   row-gap: 0.5rem;
   column-gap: 0.5rem;
@@ -277,6 +304,18 @@ export default class ReservationCard extends Vue {
   }
   & > .alert {
     grid-area: alert;
+  }
+  & > .suggested-times-wrapper {
+    grid-area: suggested-times-wrapper;
+    display: flex;
+    flex-direction: column;
+
+    & > * {
+      margin-top: 0.2rem;
+    }
+    &:first-child {
+      margin-top: 0;
+    }
   }
 }
 </style>

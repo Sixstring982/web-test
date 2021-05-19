@@ -41,12 +41,15 @@ export interface FullDateCardConfig {
   readonly key: symbol
   readonly month: number
   readonly dayOfMonth: number
-  /** 
+  /**
    * Key: time index in 15-minute increments from the start of the day.
    * Value: capacity at that time.
    */
   readonly savedTimes: ReadonlyMap<number, number>
-  /** Times staged to be modified. */
+  /**
+   * Times staged to be modified, zero-indexed from the beginning of the day,
+   * local time.
+   */
   readonly selectedTimes: Set<number>
   readonly selected: boolean
 }
@@ -58,7 +61,7 @@ export const isFullDateCardConfig = (
 export const dateCardForDayOfMonth = (
   month: number,
   dayOfMonth: number,
-  savedTimes: ReadonlyMap<number, number>,
+  savedTimes: ReadonlyMap<number, number>
 ): FullDateCardConfig => ({
   kind: DateCardKind.FULL,
   key: Symbol(),

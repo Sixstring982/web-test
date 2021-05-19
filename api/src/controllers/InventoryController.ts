@@ -1,6 +1,8 @@
 import { Controller, Post } from '@overnightjs/core'
 import { Request, Response } from 'express'
 import moment from 'moment'
+import { Sequelize, Transaction } from 'sequelize'
+import { all } from 'sequelize/types/lib/operators'
 import { Inventory } from '../models'
 import { buildArray, repeat } from '../util/arrays'
 import { buildMap } from '../util/maps'
@@ -8,115 +10,118 @@ import { queryInventoryAndRestaurantSettings } from './queries'
 
 const FIFTEEN_MINUTE_WINDOWS_PER_DAY = (24 * 60) / 15
 
+////////////////////////
+// API: Query
+////////////////////////
+
+interface QueryRequest {
+  /** ISO time string representing the start of the query. */
+  readonly startTime: string
+
+  /** ISO time string representing the end of the query. */
+  readonly endTime: string
+}
+
+interface QueryResponse {
+  /**
+   *  The base number of available reservations. If a time is not in
+   * `overrides`, this capacity should apply.
+   */
+  readonly baseCapacity: number
+
+  /**
+   * A map of:
+   * Keys: time windows, in 15-minute intervals.
+   * Values: the capacity of each window, starting at the time interval.
+   */
+  readonly overrides: { [key: string]: number }
+}
+
+////////////////////////
+// API: Update
+////////////////////////
+
+interface UpdateRequest {
+  /** The capacity to write to all of the given times. */
+  readonly newCapacity: number
+
+  /**
+   * The times to write the new capacity to. These will all be rounded down to
+   * the nearest 15-minute window, and deduplicated.
+   */
+  readonly times: readonly string[]
+}
+
 @Controller('inventory')
 export class InventoryController {
   @Post('query')
   private query(req: Request, res: Response) {
-    const date = moment(req.body.forMonth)
+    const request = req.body as QueryRequest
 
-    const startDate = moment(date).startOf('month')
-    const endDate = moment(date).endOf('month')
+    // Query for the whole month at once.
+    const startTime = moment(request.startTime)
+    const endTime = moment(request.endTime)
 
-    queryInventoryAndRestaurantSettings(startDate, endDate, async (rows, config) => {
-      const capacityByDayOfMonth = {}
+    queryInventoryAndRestaurantSettings(startTime, endTime, async (rows, config) => {
+      const baseCapacity = config.base_parties_per_time_slot
 
-      console.log('Query: read', rows.length, 'rows')
+      const overrides = {}
 
-      // Fill in all of the days currently in the database
-      for (const row of rows) {
-        const dayOfMonth = moment(row.date).date()
+      rows.forEach(row => {
+        overrides[row.time.toISOString()] = row.capacity
+      })
 
-        capacityByDayOfMonth[dayOfMonth - 1] = row.capacity
-          // Negative entries imply that no capacity has been set, so use the
-          // default in that case.
-          .map(x => (x >= 0 ? x : config.base_parties_per_time_slot))
+      const response: QueryResponse = {
+        baseCapacity,
+        overrides,
       }
 
-      // Fill in all of the other days
-      for (let day = 0; day < date.daysInMonth(); day++) {
-        if (capacityByDayOfMonth[String(day)] !== undefined) {
-          continue
-        }
-
-        capacityByDayOfMonth[String(day)] = repeat(
-          config.base_parties_per_time_slot,
-          FIFTEEN_MINUTE_WINDOWS_PER_DAY
-        )
-      }
-
-      res.json({ capacityByDayOfMonth })
+      res.json(response)
     }).catch(error => {
+      console.log(error)
       res.sendStatus(500)
     })
   }
 
   @Post('update')
   private update(req: Request, res: Response) {
-    const newCapacity: number = req.body.newCapacity
-    const selectedTimes: { [key: number]: readonly number[] } = req.body.selectedTimes
+    const { newCapacity, times } = req.body as UpdateRequest
 
-    console.log('Updating: ', req.body)
-
-    const date = moment(req.body.forDaysInMonth)
-    const startDate = moment(date).startOf('month')
-    const endDate = moment(date).endOf('month')
-
-    // Merge all existing rows with the new selectedTimes.
-    queryInventoryAndRestaurantSettings(startDate, endDate, async (rows, config) => {
-      const rowsByDayOfMonth: ReadonlyMap<number, Inventory> = buildMap(
-        rows,
-        (row: Inventory) => moment(row.date).date(),
-        row => row
-      )
-
-      console.log('Read ' + rowsByDayOfMonth.size + ' rows.')
-      console.log('Updating dates between', startDate, 'and', endDate)
-
-      for (let dayOfMonth = startDate.date(); dayOfMonth < endDate.date(); dayOfMonth++) {
-        const newTimes = new Set(selectedTimes[dayOfMonth] ?? [])
-
-        // If we're not updating this date, skip to the next one.
-        if (newTimes.size === 0) {
-          console.log('Skipping date', dayOfMonth)
-          continue
-        }
-
-        const capacity = buildArray(
-          FIFTEEN_MINUTE_WINDOWS_PER_DAY,
-          // If this time slot isn't supposed to be present, use a negative value.
-          x => (newTimes.has(x) ? newCapacity : -1)
-        )
-
-        // Is this a new date configuration?
-        if (!rowsByDayOfMonth.has(dayOfMonth)) {
-          await Inventory.create({
-            date: moment(startDate)
-              .add(dayOfMonth - 1, 'days')
-              .toDate(),
-            capacity,
-          })
-          continue
-        }
-
-        // Otherwise we're updating an existing date.
-        const row = rowsByDayOfMonth.get(dayOfMonth)
-        await Inventory.update(
-          {
-            ...row,
-            capacity: buildArray(FIFTEEN_MINUTE_WINDOWS_PER_DAY, x =>
-              // Only overwrite the selected times.
-              newTimes.has(x) ? newCapacity : row.capacity[x]
-            ),
-          },
-          { where: { id: row.id } }
-        )
-        console.log('Updating date', dayOfMonth, newCapacity)
+    // Continuation: update all times as a promise
+    // TODO(sixstring982): Make this transactional.
+    const updateTimes = (times: readonly string[]): Promise<ReadonlyArray<boolean>> => {
+      // Tail case
+      if (times.length === 0) {
+        return Promise.resolve([true])
       }
 
-      res.sendStatus(200)
-    }).catch(error => {
-      console.log(error)
-      res.sendStatus(500)
-    })
+      const time = times[0]
+      const givenMoment = moment(time)
+      const updateMoment = moment(givenMoment)
+        // Clamp to nearest 15-minute period
+        .startOf('minute')
+        .subtract(givenMoment.minute() % 15, 'minutes')
+
+      console.log('GIVEN MOMENT TRUNCATED: ', givenMoment.minute() % 15)
+
+      const resultPromise: Promise<boolean> = Inventory.upsert({
+        time: updateMoment.toDate(),
+        capacity: newCapacity,
+      })
+
+      return resultPromise.then(thisResult =>
+        updateTimes(times.slice(1)).then(tailResults => [thisResult, ...tailResults])
+      )
+    }
+
+    return updateTimes(times)
+      .then(allResults => {
+        console.log('Committed', allResults.length, 'rows.')
+        res.sendStatus(200)
+      })
+      .catch(error => {
+        console.log(error)
+        res.sendStatus(500)
+      })
   }
 }

@@ -15,11 +15,12 @@ export class Inventory extends Model<Inventory> {
   @Column({ autoIncrement: true })
   id: number
 
+  /** The time of this inventory slot. All of these will be on a 15-minute interval. */
   @Column(DataType.DATE)
-  date: Date
+  time: Date
 
-  @Column(DataType.ARRAY(DataType.INTEGER))
-  capacity: number[]
+  @Column(DataType.INTEGER)
+  capacity: number
 
   @DeletedAt
   deleted_at: string

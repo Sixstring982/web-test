@@ -10,7 +10,7 @@ export const queryInventoryAndRestaurantSettings = async (
 ) => {
   const rowPromise = Inventory.findAll({
     where: {
-      date: {
+      time: {
         [Op.between]: [start.toISOString(), end.toISOString()],
       },
     },
