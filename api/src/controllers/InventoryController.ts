@@ -1,11 +1,8 @@
 import { Controller, Post } from '@overnightjs/core'
 import { Request, Response } from 'express'
 import moment from 'moment'
-import { Sequelize, Transaction } from 'sequelize'
-import { all } from 'sequelize/types/lib/operators'
-import { Inventory } from '../models'
-import { buildArray, repeat } from '../util/arrays'
-import { buildMap } from '../util/maps'
+import { Op } from 'sequelize'
+import { Inventory, Reservation } from '../models'
 import { queryInventoryAndRestaurantSettings } from './queries'
 
 const FIFTEEN_MINUTE_WINDOWS_PER_DAY = (24 * 60) / 15
@@ -35,6 +32,13 @@ interface QueryResponse {
    * Values: the capacity of each window, starting at the time interval.
    */
   readonly overrides: { [key: string]: number }
+
+  /**
+   * A map of:
+   * Keys: time windows, in 15-minute intervals.
+   * Values: The number of reservations in each window, starting at the time interval.
+   */
+  readonly reservations: { [key: string]: number }
 }
 
 ////////////////////////
@@ -58,7 +62,6 @@ export class InventoryController {
   private query(req: Request, res: Response) {
     const request = req.body as QueryRequest
 
-    // Query for the whole month at once.
     const startTime = moment(request.startTime)
     const endTime = moment(request.endTime)
 
@@ -71,9 +74,30 @@ export class InventoryController {
         overrides[row.time.toISOString()] = row.capacity
       })
 
+      const reservations: readonly Reservation[] = await Reservation.findAll({
+        where: {
+          timestamp: {
+            [Op.between]: [startTime.toISOString(), endTime.toISOString()],
+          },
+        },
+      })
+
+      const reservationsByTime = {}
+
+      reservations.forEach(r => {
+        const timeIso = r.timestamp.toISOString()
+
+        if (reservationsByTime[timeIso] === undefined) {
+          reservationsByTime[timeIso] = 1
+        } else {
+          reservationsByTime[timeIso]++
+        }
+      })
+
       const response: QueryResponse = {
         baseCapacity,
         overrides,
+        reservations: reservationsByTime,
       }
 
       res.json(response)

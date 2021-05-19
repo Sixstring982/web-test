@@ -10,30 +10,35 @@
         assignment
       </span>
     </div>
-    <div
-      class="times-wrapper"
-      @mousedown="startDrag()"
-      @mouseup="stopDrag()"
-      @mouseleave="stopDrag()"
-    >
+    <div class="times-wrapper" @mouseup="stopDrag()" @mouseleave="stopDrag()">
       <span
         v-for="(n, i) in 96"
         v-bind:key="i"
         v-bind:class="{ selected: isTimeSelected(i), saved: isTimeSaved(i) }"
         class="time-selector"
-        @click="toggleTime(i)"
-        @mouseenter="highlightTime(i)"
-        @mouseleave="clearTime()"
+        @mousedown="startDrag(i)"
+        @mouseenter="dragTo(i)"
       >
-        {{ capacityForTime(i) }}
+        <span
+          class="more-info"
+          title="The number of reservations at this time."
+          >{{ reservationsForTime(i) }}</span
+        >
+        <span
+          class="time-view"
+          v-bind:class="{
+            medium: isMedium(i),
+            full: isFull(i),
+            overfull: isOverfull(i)
+          }"
+          :title="timeViewTooltip(i)"
+          >{{ timeStringForTime(i) }}</span
+        >
+        <span class="more-info" title="The planned capacity at this time.">{{
+          capacityForTime(i)
+        }}</span>
       </span>
     </div>
-    <template v-if="currentTime === null">
-      Select a time
-    </template>
-    <template v-else>
-      {{ currentTime }}
-    </template>
   </div>
 </template>
 
@@ -42,17 +47,30 @@ import moment from 'moment'
 import { Component, Prop, Vue } from 'vue-property-decorator'
 import { FullDateCardConfig } from './DateCardConfig'
 
+const minMax = (a: number, b: number): { min: number; max: number } => ({
+  min: Math.min(a, b),
+  max: Math.max(a, b)
+})
+
+const isBetween = (n: number, a: number, b: number): boolean => {
+  const { min, max } = minMax(a, b)
+  return n >= min && n <= max
+}
+
 export interface CopyToSelectedDatesEvent {
   readonly fromDateCardConfig: FullDateCardConfig
 }
+
+const MEDIUM_THRESHOLD = 0.5
+const FULL_THRESHOLD = 0.8
+const OVERFULL_THRESHOLD = 1
 
 @Component
 export default class TimeSelectorComponent extends Vue {
   @Prop() dateCardConfig: FullDateCardConfig
 
-  currentTime: string | null = null
-
-  dragging = false
+  dragStart?: number
+  dragEnd?: number
 
   getDate(): string {
     if (this.dateCardConfig === undefined) {
@@ -66,18 +84,36 @@ export default class TimeSelectorComponent extends Vue {
 
   handleCopyButtonClick(): void {
     const event: CopyToSelectedDatesEvent = {
-      fromDateCardConfig: this.dateCardConfig,
+      fromDateCardConfig: this.dateCardConfig
     }
 
     this.$emit('copyToSelectedDates', event)
   }
 
-  startDrag(): void {
-    this.dragging = true
+  startDrag(index: number): void {
+    this.dragStart = index
+    this.dragTo(index)
   }
 
   stopDrag(): void {
-    this.dragging = false
+    this.dragStart = undefined
+    this.dragEnd = undefined
+  }
+
+  dragTo(index: number): void {
+    if (this.dragStart !== undefined) {
+      this.dragEnd = index
+
+      for (let i = 0; i <= 96; i++) {
+        const between = isBetween(i, this.dragStart, this.dragEnd)
+        if (between) {
+          this.dateCardConfig.selectedTimes.add(i)
+        } else {
+          this.dateCardConfig.selectedTimes.delete(i)
+        }
+      }
+      this.$forceUpdate()
+    }
   }
 
   isTimeSelected(index: number): boolean {
@@ -86,6 +122,36 @@ export default class TimeSelectorComponent extends Vue {
 
   isTimeSaved(index: number): boolean {
     return this.dateCardConfig.savedTimes.has(index)
+  }
+
+  isMedium(index: number): boolean {
+    return this.capacityRatioForTime(index) >= MEDIUM_THRESHOLD
+  }
+
+  isFull(index: number): boolean {
+    return this.capacityRatioForTime(index) > FULL_THRESHOLD
+  }
+
+  isOverfull(index: number): boolean {
+    return this.capacityRatioForTime(index) > OVERFULL_THRESHOLD
+  }
+
+  timeViewTooltip(index: number): string {
+    const ratio = this.capacityRatioForTime(index)
+
+    if (ratio > OVERFULL_THRESHOLD) {
+      return 'You have too many reservations! You need to add capacity.'
+    }
+    if (ratio > FULL_THRESHOLD) {
+      return 'You almost have too many reservations. Consider adding capacity.'
+    }
+    if (ratio > MEDIUM_THRESHOLD) {
+      return (
+        'You have a lot of reservations at this time. You may need to add ' +
+        'capacity if you get too busy!'
+      )
+    }
+    return 'You have plenty of capacity left.'
   }
 
   toggleTime(index: number): void {
@@ -97,6 +163,12 @@ export default class TimeSelectorComponent extends Vue {
   }
 
   highlightTime(index: number): void {
+    if (this.dragStart !== undefined) {
+      this.toggleTime(index)
+    }
+  }
+
+  timeStringForTime(index: number): string {
     const hour = Math.floor(index / 4)
     const minute = (() => {
       const m = (index * 15) % 60
@@ -106,19 +178,26 @@ export default class TimeSelectorComponent extends Vue {
       return '0' + String(m)
     })()
 
-    this.currentTime = `${hour}:${minute}`
-
-    if (this.dragging) {
-      this.toggleTime(index)
-    }
-  }
-
-  clearTime(): void {
-    this.currentTime = null
+    return `${hour}:${minute}`
   }
 
   capacityForTime(index: number): number {
     return this.dateCardConfig.savedTimes.get(index) ?? 0
+  }
+
+  reservationsForTime(index: number): number {
+    return this.dateCardConfig.reservationsByTime.get(index) ?? 0
+  }
+
+  private capacityRatioForTime(index: number): number {
+    const capacity = this.capacityForTime(index)
+    if (capacity === 0) {
+      return 1
+    }
+
+    const reservations = this.reservationsForTime(index)
+
+    return reservations / capacity
   }
 }
 </script>
@@ -145,27 +224,49 @@ export default class TimeSelectorComponent extends Vue {
 }
 
 .times-wrapper {
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  grid-template-columns: repeat(32, 1fr);
+
+  cursor: context-menu;
 
   & > .time-selector {
+    display: flex;
+    flex-direction: column;
+
     user-select: none;
-    width: 0.6rem;
-    height: 2rem;
+    width: 100%;
+    height: 3rem;
+    line-height: 1rem;
     border: 1px solid black;
 
     will-change: background-color;
 
-    &:hover,
-    &.selected {
+    & > .time-view {
+      font-size: 0.8rem;
+      &.medium {
+        background-color: yellow;
+      }
+      &.full {
+        color: white;
+        background-color: orangered;
+        text-shadow: 0 0 2px black;
+      }
+      &.overfull {
+        color: white;
+        background-color: red;
+        text-shadow: 0 0 2px black;
+      }
+    }
+
+    &:hover {
       background-color: gray;
     }
     &.selected {
-      background-color: red;
+      background-color: #42b983;
     }
     &.selected:hover {
-      background-color: darken(red, 20);
+      background-color: darken(#42b983, 20);
     }
     &:active,
     &.selected:active {

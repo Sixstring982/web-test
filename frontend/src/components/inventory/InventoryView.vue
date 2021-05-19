@@ -51,6 +51,7 @@
     <div class="time-selector-wrapper">
       <InventoryConfigurationComponent
         :configs="dateCardConfigs"
+        :isApplying="isApplying"
         @copyToSelectedDates="handleCopyToSelectedDates($event)"
         @applyTimeConfig="handleApplyTimeConfig($event)"
       />
@@ -85,6 +86,8 @@ import { CopyToSelectedDatesEvent } from './TimeSelector.vue'
 })
 export default class InventoryViewComponent extends Vue {
   dateCardConfigs: readonly DateCardConfig[] = []
+
+  isApplying = false
 
   monthAndYear = moment().format('MMMM YYYY')
   monthDelta = 0
@@ -152,14 +155,29 @@ export default class InventoryViewComponent extends Vue {
     const flatTimes = []
     times.forEach(ts => ts.forEach(t => flatTimes.push(t)))
 
-    await axios.post('http://localhost:9090/inventory/update', {
-      newCapacity: e.newCapacity,
-      times: flatTimes
-    })
-
-    this.dateCardConfigs = await this.buildDateCardsForRelativeMonth(
-      this.monthDelta
-    )
+    this.isApplying = true
+    axios
+      .post('http://localhost:9090/inventory/update', {
+        newCapacity: e.newCapacity,
+        times: flatTimes
+      })
+      .then(() =>
+        this.buildDateCardsForRelativeMonth(
+          this.monthDelta,
+          new Set(
+            this.dateCardConfigs
+              .filter(x => isFullDateCardConfig(x) && x.selected)
+              .map(x => (x as FullDateCardConfig).dayOfMonth)
+          )
+        )
+      )
+      .then(dateCards => {
+        this.dateCardConfigs = dateCards
+        this.isApplying = false
+      })
+      .catch(() => {
+        this.isApplying = false
+      })
   }
 
   handleCopyToSelectedDates(e: CopyToSelectedDatesEvent): void {
@@ -197,7 +215,8 @@ export default class InventoryViewComponent extends Vue {
   }
 
   private async buildDateCardsForRelativeMonth(
-    delta: number
+    delta: number,
+    selectedDays?: ReadonlySet<number>
   ): Promise<ReadonlyArray<DateCardConfig>> {
     const cards = []
 
@@ -246,6 +265,7 @@ export default class InventoryViewComponent extends Vue {
             .add(dayOfMonth - 1, 'days')
 
           const capacitiesByIndex = new Map<number, number>()
+          const reservationsByIndex = new Map<number, number>()
 
           // Loop through all 15-minute windows
           for (let i = 0; i < 24 * 4; i++) {
@@ -257,6 +277,7 @@ export default class InventoryViewComponent extends Vue {
               i,
               response.overrides[windowTime] ?? response.baseCapacity
             )
+            reservationsByIndex.set(i, response.reservations[windowTime] ?? 0)
           }
 
           cards.push(
@@ -265,7 +286,9 @@ export default class InventoryViewComponent extends Vue {
                 .add(delta, 'months')
                 .month(),
               dayOfMonth,
-              capacitiesByIndex
+              capacitiesByIndex,
+              reservationsByIndex,
+              selectedDays?.has(dayOfMonth)
             )
           )
         }

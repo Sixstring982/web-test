@@ -47,6 +47,11 @@ export interface FullDateCardConfig {
    */
   readonly savedTimes: ReadonlyMap<number, number>
   /**
+   * Key: time index in 15-minute increments from the start of the day.
+   * Value: number of reservations at that time.
+   */
+  readonly reservationsByTime: ReadonlyMap<number, number>
+  /**
    * Times staged to be modified, zero-indexed from the beginning of the day,
    * local time.
    */
@@ -61,15 +66,18 @@ export const isFullDateCardConfig = (
 export const dateCardForDayOfMonth = (
   month: number,
   dayOfMonth: number,
-  savedTimes: ReadonlyMap<number, number>
+  savedTimes: ReadonlyMap<number, number>,
+  reservationsByTime: ReadonlyMap<number, number>,
+  selected?: boolean
 ): FullDateCardConfig => ({
   kind: DateCardKind.FULL,
   key: Symbol(),
   month,
   savedTimes,
+  reservationsByTime,
   selectedTimes: new Set(),
   dayOfMonth,
-  selected: false
+  selected: selected ?? false
 })
 
 export const toggleSelected = (c: FullDateCardConfig): FullDateCardConfig => ({

@@ -17,7 +17,13 @@
             @change="handleNewCapacityChange($event)"
           />
         </div>
-        <input type="button" value="Apply" @click="applyTimeConfig()" />
+        <input
+          v-if="!isApplying"
+          type="button"
+          value="Apply"
+          @click="applyTimeConfig()"
+        />
+        <Spinner class="apply-spinner" v-else />
       </div>
       <TimeSelectorComponent
         v-for="config in selectedConfigs()"
@@ -32,6 +38,7 @@
 <script lang="ts">
 import { Component, Prop, Vue } from 'vue-property-decorator'
 import { DateCardConfig, isFullDateCardConfig } from './DateCardConfig'
+import Spinner from '../spinner/Spinner.vue'
 
 import TimeSelectorComponent, {
   CopyToSelectedDatesEvent
@@ -43,11 +50,13 @@ export interface ApplyTimeConfigEvent {
 
 @Component({
   components: {
-    TimeSelectorComponent
+    TimeSelectorComponent,
+    Spinner
   }
 })
 export default class InventoryConfigurationComponent extends Vue {
   @Prop() configs: readonly DateCardConfig[]
+  @Prop() isApplying = false
 
   newCapacity = 3
 
@@ -82,5 +91,9 @@ export default class InventoryConfigurationComponent extends Vue {
   display: flex;
   flex-direction: row;
   justify-content: center;
+}
+
+.apply-spinner {
+  margin-left: .8rem;
 }
 </style>
