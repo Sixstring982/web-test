@@ -1,11 +1,8 @@
 import { Controller, Post } from '@overnightjs/core'
 import { Request, Response } from 'express'
 import moment from 'moment'
-import { Op } from 'sequelize'
-import { Inventory, Reservation } from '../models'
-import { queryInventoryAndRestaurantSettings } from './queries'
-
-const FIFTEEN_MINUTE_WINDOWS_PER_DAY = (24 * 60) / 15
+import { Inventory } from '../models'
+import { InventoryAndReservations, queryBetween } from './queries'
 
 ////////////////////////
 // API: Query
@@ -36,7 +33,8 @@ interface QueryResponse {
   /**
    * A map of:
    * Keys: time windows, in 15-minute intervals.
-   * Values: The number of reservations in each window, starting at the time interval.
+   * Values: The number of reservations in each window, starting at the time 
+   * interval.
    */
   readonly reservations: { [key: string]: number }
 }
@@ -65,43 +63,39 @@ export class InventoryController {
     const startTime = moment(request.startTime)
     const endTime = moment(request.endTime)
 
-    queryInventoryAndRestaurantSettings(startTime, endTime, async (rows, config) => {
-      const baseCapacity = config.base_parties_per_time_slot
+    queryBetween(
+      startTime,
+      endTime,
+      async ({ inventory, reservations, config }: InventoryAndReservations) => {
+        const baseCapacity = config.base_parties_per_time_slot
 
-      const overrides = {}
+        const overrides = {}
 
-      rows.forEach(row => {
-        overrides[row.time.toISOString()] = row.capacity
-      })
+        inventory.forEach(row => {
+          overrides[row.time.toISOString()] = row.capacity
+        })
 
-      const reservations: readonly Reservation[] = await Reservation.findAll({
-        where: {
-          timestamp: {
-            [Op.between]: [startTime.toISOString(), endTime.toISOString()],
-          },
-        },
-      })
+        const reservationsByTime = {}
 
-      const reservationsByTime = {}
+        reservations.forEach(r => {
+          const timeIso = r.timestamp.toISOString()
 
-      reservations.forEach(r => {
-        const timeIso = r.timestamp.toISOString()
+          if (reservationsByTime[timeIso] === undefined) {
+            reservationsByTime[timeIso] = 1
+          } else {
+            reservationsByTime[timeIso]++
+          }
+        })
 
-        if (reservationsByTime[timeIso] === undefined) {
-          reservationsByTime[timeIso] = 1
-        } else {
-          reservationsByTime[timeIso]++
+        const response: QueryResponse = {
+          baseCapacity,
+          overrides,
+          reservations: reservationsByTime,
         }
-      })
 
-      const response: QueryResponse = {
-        baseCapacity,
-        overrides,
-        reservations: reservationsByTime,
+        res.json(response)
       }
-
-      res.json(response)
-    }).catch(error => {
+    ).catch(error => {
       console.log(error)
       res.sendStatus(500)
     })
@@ -113,7 +107,9 @@ export class InventoryController {
 
     // Continuation: update all times as a promise
     // TODO(sixstring982): Make this transactional.
-    const updateTimes = (times: readonly string[]): Promise<ReadonlyArray<boolean>> => {
+    const updateTimes = (
+      times: readonly string[]
+    ): Promise<ReadonlyArray<boolean>> => {
       // Tail case
       if (times.length === 0) {
         return Promise.resolve([true])
@@ -134,7 +130,10 @@ export class InventoryController {
       })
 
       return resultPromise.then(thisResult =>
-        updateTimes(times.slice(1)).then(tailResults => [thisResult, ...tailResults])
+        updateTimes(times.slice(1)).then(tailResults => [
+          thisResult,
+          ...tailResults,
+        ])
       )
     }
 
