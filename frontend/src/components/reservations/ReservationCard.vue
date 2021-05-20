@@ -90,11 +90,19 @@ import { Reservation } from '../../model/Reservation'
 import AlertComponent from '../alert/Alert.vue'
 import { AlertConfig, errorAlert, infoAlert } from '../alert/AlertConfig'
 
-const getInitialDate = (): moment.Moment =>
-  // 7 PM today is a good time to eat.
-  moment()
+const getInitialDate = (): moment.Moment => {
+  // 7PM tonight is a good time to eat.
+  const m = moment()
     .startOf('day')
     .add(19, 'hours')
+
+  // ...Unless it's past 7. Let's go tomorrow.
+  if (moment().hour() >= 19) {
+    m.add(1, 'day')
+  }
+
+  return m
+}
 
 const getInitialReservation = (): Reservation => ({
   name: '',
@@ -225,7 +233,7 @@ export default class ReservationCard extends Vue {
     if (this.reservation.name.length < 3) {
       return 'Please enter a longer name.'
     }
-    // Super simple email regexp. They're really hard to validate properly!
+    // Super simple email regexp. They're hard to validate properly!
     if (this.reservation.email.match(/.+@.+\..[a-z]+/) === null) {
       return 'Please enter a valid email.'
     }

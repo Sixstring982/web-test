@@ -16,7 +16,6 @@
         </p>
         <div class="base-parties-input">
           <input
-            v-if="!loading"
             class="base-parties-input"
             type="number"
             :value="settings.basePartySize"
@@ -24,11 +23,8 @@
           />
         </div>
         <p />
-        <input
-          type="button"
-          :value="saveButtonText"
-          v-on:click="saveSettings()"
-        />
+        <Spinner v-if="saving" />
+        <input v-else type="button" value="Save" v-on:click="saveSettings()" />
       </template>
     </template>
   </div>
@@ -52,8 +48,6 @@ export default class RestaurantSettingsComponent extends Vue {
   loading = false
   saving = false
 
-  saveButtonText = 'Save'
-
   /* override */
   mounted(): void {
     this.reload()
@@ -62,7 +56,7 @@ export default class RestaurantSettingsComponent extends Vue {
   reload(): void {
     this.loading = true
     axios
-      .get('http://localhost:9090/restaurantsettings')
+      .get('http://localhost:9090/restaurantsettings/get')
       .then(response => {
         this.settings = {
           basePartySize: response.data.base_parties_per_time_slot
@@ -90,27 +84,21 @@ export default class RestaurantSettingsComponent extends Vue {
     }
 
     this.saving = true
-    this.saveButtonText = 'Saving...'
 
     const postArgs = {
       basePartySize: this.settings.basePartySize
     }
 
-    console.log(postArgs)
-
     axios
-      .post('http://localhost:9090/restaurantsettings', postArgs)
-      .then(response => {
-        this.saveButtonText = 'Settings saved successfully'
+      .post('http://localhost:9090/restaurantsettings/update', postArgs)
+      .then(() => {
+        this.$emit('updated')
       })
       .catch(error => {
         console.log(error)
-        this.saveButtonText = 'Settings could not be saved. Try again later.'
       })
       .then(() => {
-        setTimeout(() => {
-          this.saveButtonText = 'Save'
-        }, 500)
+        this.saving = false
       })
   }
 }

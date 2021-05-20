@@ -5,7 +5,7 @@ import { DEFAULT_BASE_PARTIES_PER_TIME_SLOT } from '../util/restaurants'
 
 @Controller('restaurantsettings')
 export class RestaurantSettingsController {
-  @Get('')
+  @Get('get')
   private async get(req: Request, res: Response) {
     const settings = await RestaurantSettings.findOne({ where: { id: 1 } })
 
@@ -23,11 +23,11 @@ export class RestaurantSettingsController {
 
     RestaurantSettings.create(initialSettings)
 
-    return res.json(initialSettings)
+    res.json(initialSettings)
   }
 
-  @Post('')
-  private async save(req: Request, res: Response) {
+  @Post('update')
+  private async update(req: Request, res: Response) {
     const newSettings = req.body
 
     console.log(req)
@@ -36,9 +36,11 @@ export class RestaurantSettingsController {
 
     settings.base_parties_per_time_slot = newSettings.basePartySize
 
-    RestaurantSettings.update(
+    await RestaurantSettings.update(
       { base_parties_per_time_slot: newSettings.basePartySize },
       { where: { id: 1 } }
     )
+
+    res.sendStatus(200)
   }
 }

@@ -96,6 +96,18 @@ export default class InventoryViewComponent extends Vue {
     this.dateCardConfigs = await this.buildDateCardsForRelativeMonth(0)
   }
 
+  /** Refreshes this component by fetching relevant data. */
+  async refresh() {
+    this.dateCardConfigs = await this.buildDateCardsForRelativeMonth(
+      this.monthDelta,
+      new Set(
+        this.dateCardConfigs
+          .filter(x => isFullDateCardConfig(x) && x.selected)
+          .map(x => (x as FullDateCardConfig).dayOfMonth)
+      )
+    )
+  }
+
   decrementMonth() {
     this.shiftMonth(-1)
   }

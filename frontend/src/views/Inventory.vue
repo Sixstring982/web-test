@@ -2,8 +2,11 @@
   <div>
     <h1>Inventory</h1>
     <div class="inventory-grid">
-      <InventoryViewComponent class="inventory-view" />
-      <RestaurantSettings class="restaurant-settings" />
+      <InventoryViewComponent ref="inventoryView" class="inventory-view" />
+      <RestaurantSettings
+        class="restaurant-settings"
+        @updated="handleRestarauntSettingsUpdated()"
+      />
     </div>
   </div>
 </template>
@@ -17,6 +20,11 @@ export default {
   components: {
     InventoryViewComponent,
     RestaurantSettings
+  },
+  methods: {
+    handleRestarauntSettingsUpdated: function() {
+      this.$refs.inventoryView.refresh()
+    }
   }
 }
 </script>
