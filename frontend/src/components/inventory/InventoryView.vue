@@ -256,8 +256,6 @@ export default class InventoryViewComponent extends Vue {
       })
     ).data
 
-    console.log(response)
-
     for (let x = 0; x < 7; x++) {
       for (let y = 0; y < 6; y++) {
         const calendarIndex = x * 6 + y
@@ -285,10 +283,10 @@ export default class InventoryViewComponent extends Vue {
               .add(15 * i, 'minutes')
               .toISOString()
 
-            capacitiesByIndex.set(
-              i,
-              response.overrides[windowTime] ?? response.baseCapacity
-            )
+            if (response.overrides[windowTime] !== undefined) {
+              capacitiesByIndex.set(i, response.overrides[windowTime])
+            }
+
             reservationsByIndex.set(i, response.reservations[windowTime] ?? 0)
           }
 
@@ -298,6 +296,7 @@ export default class InventoryViewComponent extends Vue {
                 .add(delta, 'months')
                 .month(),
               dayOfMonth,
+              response.baseCapacity,
               capacitiesByIndex,
               reservationsByIndex,
               selectedDays?.has(dayOfMonth)

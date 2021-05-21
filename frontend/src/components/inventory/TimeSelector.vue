@@ -14,16 +14,14 @@
       <span
         v-for="(n, i) in 96"
         v-bind:key="i"
-        v-bind:class="{ selected: isTimeSelected(i), saved: isTimeSaved(i) }"
+        v-bind:class="{ selected: isTimeSelected(i) }"
         class="time-selector"
         @mousedown="startDrag(i)"
         @mouseenter="dragTo(i)"
       >
-        <span
-          class="more-info"
-          title="The number of reservations at this time."
-          >{{ reservationsForTime(i) }}</span
-        >
+        <span title="The number of reservations at this time.">{{
+          reservationsForTime(i) || '_'
+        }}</span>
         <span
           class="time-view"
           v-bind:class="{
@@ -34,9 +32,14 @@
           :title="timeViewTooltip(i)"
           >{{ timeStringForTime(i) }}</span
         >
-        <span class="more-info" title="The planned capacity at this time.">{{
-          capacityForTime(i)
-        }}</span>
+        <span
+          class="capacity-view"
+          v-bind:class="{
+            saved: isCapacitySaved(i)
+          }"
+          title="The planned capacity at this time."
+          >{{ capacityForTime(i) }}</span
+        >
       </span>
     </div>
   </div>
@@ -120,10 +123,6 @@ export default class TimeSelectorComponent extends Vue {
     return this.dateCardConfig.selectedTimes.has(index)
   }
 
-  isTimeSaved(index: number): boolean {
-    return this.dateCardConfig.savedTimes.has(index)
-  }
-
   isMedium(index: number): boolean {
     return this.capacityRatioForTime(index) >= MEDIUM_THRESHOLD
   }
@@ -181,8 +180,15 @@ export default class TimeSelectorComponent extends Vue {
     return `${hour}:${minute}`
   }
 
+  isCapacitySaved(index: number): boolean {
+    return this.dateCardConfig.savedTimes.has(index)
+  }
+
   capacityForTime(index: number): number {
-    return this.dateCardConfig.savedTimes.get(index) ?? 0
+    return (
+      this.dateCardConfig.savedTimes.get(index) ??
+      this.dateCardConfig.baseCapacity
+    )
   }
 
   reservationsForTime(index: number): number {
@@ -257,6 +263,11 @@ export default class TimeSelectorComponent extends Vue {
         background-color: red;
         text-shadow: 0 0 2px black;
       }
+    }
+
+    & > .capacity-view.saved {
+      background-color: rgba(0, 0, 0, 0.6);
+      color: white;
     }
 
     &:hover {
